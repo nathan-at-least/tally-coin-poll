@@ -49,43 +49,38 @@ def create_row(cli, receivedinfo):
     txid = receivedinfo['txid']
 
     row = {
-        'is valid': False,
         'txid': txid,
     }
+    issues = []
 
     try:
         memo = decode_memo(receivedinfo['memo'])
     except MalformedInput as e:
-        row['parse issue'] = f'{e}'
-        return row
+        issues.append(f'{e}')
+    else:
+        try:
+            answers = parse_answers(memo)
+        except MalformedInput as e:
+            issues.append(f'{e}')
+        else:
+            for (i, (answer, comment)) in enumerate(answers):
+                qnum = i+1
+                row[f'answer {qnum}'] = answer
+                row[f'answer {qnum} comment'] = comment
 
     try:
         taddr = get_sending_addr(cli, txid)
     except MalformedInput as e:
-        row['parse issue'] = f'{e}'
-        return row
+        issues.append(f'{e}')
+    else:
+        row['taddr'] = taddr
+        try:
+            row['balance'] = get_balance(cli, taddr)
+        except MalformedInput as e:
+            issues.append(f'{e}')
 
-    row['taddr'] = taddr
-
-    try:
-        answers = parse_answers(memo)
-    except MalformedInput as e:
-        row['parse issue'] = f'{e}'
-        return row
-
-    for (i, (answer, comment)) in enumerate(answers):
-        qnum = i+1
-        row[f'answer {qnum}'] = answer
-        row[f'answer {qnum} comment'] = comment
-
-    try:
-        bal = get_balance(cli, taddr)
-    except MalformedInput as e:
-        row['parse issue'] = f'{e}'
-        return row
-
-    row['balance'] = bal
-    row['is valid'] = True
+    row['is valid'] = len(issues) == 0
+    row['parse issue'] = '; '.join(issues)
     return row
 
 
