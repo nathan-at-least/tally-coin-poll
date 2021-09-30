@@ -34,51 +34,82 @@ def main(args=sys.argv[1:]):
             'answer 3 comment',
             'parse issue',
             'txid',
+            'block height recorded',
         ],
     )
     csvf.writeheader()
 
+    height = cli.getinfo()['blocks']
     for receivedinfo in cli.z_listreceivedbyaddress(POLL_ADDRESS):
-        txid = receivedinfo['txid']
-
-        row = {
-            'is valid': False,
-            'txid': txid,
-        }
-        try:
-            (taddr, answers) = parse_sender_and_memo(cli, txid, receivedinfo)
-        except MalformedInput as e:
-            row['parse issue'] = f'{e}'
-        else:
-            row['taddr'] = taddr
-            for (i, (answer, comment)) in enumerate(answers):
-                qnum = i+1
-                row[f'answer {qnum}'] = answer
-                row[f'answer {qnum} comment'] = comment
-
-            try:
-                bal = get_balance(cli, taddr)
-            except MalformedInput as e:
-                row['parse issue'] = f'{e}'
-            else:
-                row['balance'] = bal
-                row['is valid'] = True
-
+        row = create_row(cli, receivedinfo)
+        row['block height recorded'] = height
         csvf.writerow(row)
 
+def create_row(cli, receivedinfo):
+    txid = receivedinfo['txid']
 
-def parse_sender_and_memo(cli, txid, receivedinfo):
-    memo = decode_memo(receivedinfo['memo'])
-    sendaddr = get_sending_addr(cli, txid)
-    return (sendaddr, memo)
+    row = {
+        'is valid': False,
+        'txid': txid,
+    }
+
+    try:
+        memo = decode_memo(receivedinfo['memo'])
+    except MalformedInput as e:
+        row['parse issue'] = f'{e}'
+        return row
+
+    try:
+        taddr = get_sending_addr(cli, txid)
+    except MalformedInput as e:
+        row['parse issue'] = f'{e}'
+        return row
+
+    row['taddr'] = taddr
+
+    try:
+        answers = parse_answers(memo)
+    except MalformedInput as e:
+        row['parse issue'] = f'{e}'
+        return row
+
+    for (i, (answer, comment)) in enumerate(answers):
+        qnum = i+1
+        row[f'answer {qnum}'] = answer
+        row[f'answer {qnum} comment'] = comment
+
+    try:
+        bal = get_balance(cli, taddr)
+    except MalformedInput as e:
+        row['parse issue'] = f'{e}'
+        return row
+
+    row['balance'] = bal
+    row['is valid'] = True
+    return row
 
 
 def decode_memo(memhex):
-    text = bytes.fromhex(memhex).decode('utf-8').strip('\0').strip()
+    try:
+        membytes = bytes.fromhex(memhex)
+    except ValueError as e:
+        raise MalformedInput(f'Internal zcashd API failure, could not decode memo hex: {e}')
+
+    try:
+        utf8 = membytes.decode('utf-8')
+    except UnicodeDecodeError as e:
+        raise MalformedInput(f'Malformed memo utf-8 in {membytes!r}: {e}')
+
+    return utf8.strip('\0').strip()
+
+
+def parse_answers(memo):
     answers = []
-    responses = text.split(';')
-    if len(responses) > 3:
-        raise MalformedInput(f'Could not parse memo {text!r}')
+    responses = memo.split(';')
+
+    junkfields = [f for f in responses[3:] if len(f.strip()) > 0]
+    if junkfields:
+        raise MalformedInput(f'Unexpected extra fields: {"; ".join(junkfields)}')
 
     for (ix, response) in enumerate(responses):
         response = response.strip()
@@ -101,22 +132,33 @@ def decode_memo(memhex):
 def get_sending_addr(cli, txid):
     txinfo = cli.getrawtransaction(txid, 1)
 
-    try:
-        [txin] = txinfo['vin']
-    except ValueError:
-        raise MalformedInput(f'Voting txid {txid} has unexpected number of inputs: {len(txinfo["vin"])}')
+    taddrs = set()
+    intxids = set()
+    for txin in txinfo['vin']:
+        intxid = txin['txid']
+        intxids.add(intxid)
+        invout = txin['vout']
 
-    intxid = txin['txid']
-    invout = txin['vout']
+        intxinfo = cli.getrawtransaction(intxid, 1)
+        inout = intxinfo['vout'][invout]
+        try:
+            [taddr] = inout['scriptPubKey']['addresses']
+        except ValueError:
+            raise MalformedInput(f'Sending txid {intxid} vout {invout} has unexpected number of scriptPubKeys {inout}')
 
-    intxinfo = cli.getrawtransaction(intxid, 1)
-    inout = intxinfo['vout'][invout]
-    try:
-        [addr] = inout['scriptPubKey']['addresses']
-    except ValueError:
-        raise MalformedInput(f'Sending txid {intxid} vout {invout} has unexpected number of scriptPubKeys {inout}')
+        taddrs.add(taddr)
 
-    return addr
+    if len(taddrs) == 0:
+        raise MalformedInput(
+            f'Voting memo came from fully shielded transfers with no associated taddr.'
+        )
+    elif len(taddrs) > 1:
+        raise MalformedInput(
+            f'Voting memo came from {len(taddrs)} taddrs, {", ".join(taddrs)}, where a single taddr was expected; ' +
+            f'sending txids {", ".join(intxids)}'
+        )
+
+    return taddrs.pop()
 
 
 def get_balance(cli, taddr):
