@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 import re
+import csv
 import json
 import logging
 import sys
@@ -13,24 +14,61 @@ POLL_START_HEIGHT = 1398360
 
 
 def main(args=sys.argv[1:]):
-    logging.basicConfig(level=logging.DEBUG, format='[%(levelname) -5s] %(message)s')
+    logging.basicConfig(level=logging.DEBUG, stream=sys.stderr, format='[%(levelname) -5s] %(message)s')
     logging.info('zec-coin-poll tally address: %s', POLL_ADDRESS)
 
     cli = ZcashClient()
     cli.z_importviewingkey(POLL_VIEWING_KEY, 'whenkeyisnew', POLL_START_HEIGHT)
 
+    csvf = csv.DictWriter(
+        sys.stdout,
+        [
+            'is valid',
+            'taddr',
+            'balance',
+            'answer 1',
+            'answer 1 comment',
+            'answer 2',
+            'answer 2 comment',
+            'answer 3',
+            'answer 3 comment',
+            'parse issue',
+            'txid',
+        ],
+    )
+    csvf.writeheader()
+
     for receivedinfo in cli.z_listreceivedbyaddress(POLL_ADDRESS):
+        txid = receivedinfo['txid']
+
+        row = {
+            'is valid': False,
+            'txid': txid,
+        }
         try:
-            (taddr, memo) = parse_sender_and_memo(cli, receivedinfo)
-            bal = get_balance(cli, taddr)
-            raise MalformedInput(f'debug: %r', (taddr, bal, memo))
+            (taddr, answers) = parse_sender_and_memo(cli, txid, receivedinfo)
         except MalformedInput as e:
-            logging.info('Skipping malformed input: %s', e)
+            row['parse issue'] = f'{e}'
+        else:
+            row['taddr'] = taddr
+            for (i, (answer, comment)) in enumerate(answers):
+                qnum = i+1
+                row[f'answer {qnum}'] = answer
+                row[f'answer {qnum} comment'] = comment
+
+            try:
+                bal = get_balance(cli, taddr)
+            except MalformedInput as e:
+                row['parse issue'] = f'{e}'
+            else:
+                row['balance'] = bal
+                row['is valid'] = True
+
+        csvf.writerow(row)
 
 
-def parse_sender_and_memo(cli, receivedinfo):
+def parse_sender_and_memo(cli, txid, receivedinfo):
     memo = decode_memo(receivedinfo['memo'])
-    txid = receivedinfo['txid']
     sendaddr = get_sending_addr(cli, txid)
     return (sendaddr, memo)
 
