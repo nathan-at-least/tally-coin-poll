@@ -5,11 +5,16 @@ poll results, such as the one operated by ECC described here:
 
 https://forum.zcashcommunity.com/t/coin-holder-polling-instructions/40170
 
-## tally.py
+There are two utilities:
 
-This script calculates the tally results by querying a local `zcashd`
-instance. It has the viewing key for the specific poll linked above so
-that it should "just work" out of the box.
+- [`tally.py`](#tally) uses `zcashd` to generate tally results in CSV format.
+- [`google-sheets-updater.py`](#google-sheets-updater) uses `tally.py` and Google APIs to update a Google Sheets with the tally results.
+
+## tally
+
+The `tally.py` script calculates the tally results by querying a local
+`zcashd` instance. It has the viewing key for the specific poll linked
+above so that it should "just work" out of the box.
 
 ### Guide
 
@@ -42,8 +47,8 @@ If this is a brand new `zcashd` instance which you've *never* run before editing
 However, if you used this `zcashd` instance at all before editing the config file, you need to `reindex`. This is necessary and safe to do whether or not that instance is already synced to the network:
 
 ```
-$ zcash-cli stop
-$ zcashd -reindex
+zcash-cli stop
+zcashd -reindex
 ```
 
 Reindexing or initial sync will take a fair amount of time. (On my cloud instance it took somewhere less than 24 hours.)
@@ -53,7 +58,7 @@ Reindexing or initial sync will take a fair amount of time. (On my cloud instanc
 The `tally.py` script requires Python 3. Install it for your platform. On common debian-like linux setups, do this:
 
 ```
-$ sudo apt update && sudo apt install python3
+sudo apt update && sudo apt install python3
 ```
 
 #### Step 5: Ensure `zcashd` is synced
@@ -73,7 +78,40 @@ The `tally.py` script has the specific polling viewing key baked in and will imp
 It writes the poll results in a CSV format to `stdout` and writes debug information on `stderr`. You can save the results to a file with a command like this:
 
 ```
-$ python3 ./tally.py > results.csv
+python3 ./tally.py > results.csv
 ```
 
 You can then import those results into a spreadsheet app, or process them any other way.
+
+## google-sheets-updater
+
+The `google-sheets-updater.py` script runs `tally.py` periodically and uploads the results to a Google Sheets document. The following describes how to configure and operate this script:
+
+### Step 1. Install Python 3 and `pip`
+
+The `google-sheets-updater.py` script requires Python 3 and the `pip` dependency management tool. Install these for your platform. On common debian-like linux setups, do this:
+
+```
+sudo apt update && sudo apt install python3 python3-pip
+```
+
+To get a more recent and standardized `pip` install, run this on debian-like systems:
+
+```
+pip3 install --upgrade pip
+```
+
+Verify you now have the standard recent version of `pip`:
+
+```
+which pip
+pip --version
+```
+
+### Step 2. Install Google API client libraries.
+
+These instructions come directly from: https://developers.google.com/sheets/api/quickstart/python
+
+```
+pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
+```
