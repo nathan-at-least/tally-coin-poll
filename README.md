@@ -5,8 +5,6 @@ poll results, such as the one operated by ECC described here:
 
 https://forum.zcashcommunity.com/t/coin-holder-polling-instructions/40170
 
-There are two utilities: `tally.py` and `upload-results.py`.
-
 ## tally.py
 
 This script calculates the tally results by querying a local `zcashd`
