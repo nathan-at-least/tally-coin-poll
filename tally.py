@@ -48,8 +48,9 @@ def main(args=sys.argv[1:]):
                 'answer 2 comment',
                 'answer 3',
                 'answer 3 comment',
-                'parse issue',
+                'issues',
                 'txid',
+                'memo',
                 'block height recorded',
             ],
         )
@@ -92,6 +93,7 @@ def create_row(cli, receivedinfo):
     except MalformedInput as e:
         issues.append(f'{e}')
     else:
+        row['memo'] = memo
         try:
             answers = parse_answers(memo)
         except MalformedInput as e:
@@ -114,7 +116,7 @@ def create_row(cli, receivedinfo):
             issues.append(f'{e}')
 
     row['is valid'] = len(issues) == 0
-    row['parse issue'] = '; '.join(issues)
+    row['issues'] = '; '.join(issues)
     return row
 
 
