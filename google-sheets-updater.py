@@ -1,4 +1,7 @@
 #! /usr/bin/env python3
+#
+# References:
+# https://developers.google.com/sheets/api/guides/concepts
 
 from time import sleep
 import logging
@@ -27,11 +30,14 @@ def main():
     while True:
         for height in range(POLL_CUTOFF_HEIGHT, 1, -1):
             csvpath = csvdir / f'tally-{height}.csv'
-            updatepath = csvpath + '.sheet-updated'
-            if csvpath.exists() and not updatepath.exists():
-                logging.info('Updating sheet with: %s', csvpath)
-                u.update_from_csv(csvpath)
-                updatepath.touch()
+            updatepath = csvdir / (csvpath.name + '.sheet-updated')
+
+            if csvpath.exists():
+                if not updatepath.exists():
+                    logging.info('Updating sheet with: %s', csvpath)
+                    u.update_from_csv(csvpath)
+                    updatepath.touch()
+
                 if height == POLL_CUTOFF_HEIGHT:
                     logging.info('Updated final cutoff height %s.', height)
                     raise SystemExit()
@@ -60,34 +66,27 @@ def init_logging(basedir):
 
 class Updater:
     def __init__(self, config):
-        api_key = config['api_key']
+        self.spreadsheet_id = config['spreadsheet_id']
         self.sheet_id = config['sheet_id']
-        self.sheet_title = config['sheet_title']
 
         logging.info(
-            'Loaded config with api_key=***, sheet_id=%r, sheet_title=%r',
+            'Loaded config with spreadsheet_id=%r, sheet_id=%r',
+            self.spreadsheet_id,
             self.sheet_id,
-            self.sheet_title,
         )
-        self.service = build('sheets', 'v4', developerKey=api_key)
-        self.subsheet_id = self._get_subsheet_id()
-        logging.info(
-            'Resolved subsheet_id=%r for %r',
-            self.subsheet_id,
-            self.sheet_title,
-        )
+        self.service = build('sheets', 'v4')
 
     def update_from_csv(self, csvpath):
         with csvpath.open('r') as f:
             csvdata = f.read()
 
         request = self.service.spreadsheets().batchUpdate(
-            spreadsheetId=self.sheet_id,
+            spreadsheetId=self.spreadsheet_id,
             body={
                 'requests': [{
                     'pasteData': {
                         "coordinate": {
-                            "sheetId": self.subsheet_id,
+                            "sheetId": self.sheet_id,
                             "rowIndex": "0",
                             "columnIndex": "0",
                         },
@@ -100,26 +99,13 @@ class Updater:
         )
         return request.execute()
 
-    def _get_subsheet_id(self):
-        for sheet in self._get_subsheets():
-            props = sheet['properties']
-            if props.get('title') == self.sheet_title:
-                return props['sheetId']
-
-    def _get_subsheets(self):
-        query = self.service.spreadsheets().values().get(
-            spreadsheetId=self.sheet_id,
-            fields='sheets.properties',
-        )
-        return query.execute().get('sheets')
-
 
 def load_config(basedir):
     confpath = basedir / 'google-sheets-updater-config.json'
     with confpath.open('r') as f:
         config = json.load(f)
 
-    if set(config.keys()) == set(['api_key', 'sheet_id', 'sheet_title']):
+    if set(config.keys()) == set(['spreadsheet_id', 'sheet_id']):
         return config
     else:
         raise ValueError(f'Unexpected or missing entries in {confpath}: {config!r}')
