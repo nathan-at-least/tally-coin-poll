@@ -136,11 +136,8 @@ def decode_memo(memhex):
 
 def parse_answers(memo):
     answers = []
+    issues = []
     responses = memo.split(';')
-
-    junkfields = [f for f in responses[3:] if len(f.strip()) > 0]
-    if junkfields:
-        raise MalformedInput(f'Unexpected extra fields: {"; ".join(junkfields)}')
 
     for (ix, response) in enumerate(responses):
         response = response.strip()
@@ -152,12 +149,21 @@ def parse_answers(memo):
 
             option = fullanswer[0].lower()
             if (qnum in (1, 2) and option not in 'abcde') or (qnum == 3 and option not in 'yn'):
-                raise MalformedInput('Could not parse memo response {qnum}, unknown option {option!r} in {response!r}')
+                issues.append(f'Could not parse memo response {qnum}, unknown option {option!r} in {response!r}')
 
             extra = fullanswer[1:].strip()
             answers.append((option, extra))
+        else:
+            issues.append(f'Response {qnum} does not start with the number {qnum}')
 
-    return answers
+    junkfields = [f for f in responses[3:] if len(f.strip()) > 0]
+    if junkfields:
+        issues.append(f'Unexpected extra fields: {"; ".join(junkfields)}')
+
+    if len(issues) == 0:
+        return answers
+    else:
+        raise MalformedInput('; '.join(issues))
 
 
 def get_sending_addr(cli, txid):
