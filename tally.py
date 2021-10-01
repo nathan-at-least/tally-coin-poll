@@ -30,7 +30,7 @@ def main(args=sys.argv[1:]):
     else:
         print(f'Tally path {csvpath} does not exist; generating...')
 
-    init_logging(basedir)
+    init_logging(basedir, height)
     logging.info('Importing viewing key for zec-coin-poll tally address: %s', POLL_ADDRESS)
     cli.z_importviewingkey(POLL_VIEWING_KEY, 'whenkeyisnew', POLL_START_HEIGHT)
 
@@ -62,11 +62,11 @@ def main(args=sys.argv[1:]):
             csvf.writerow(row)
 
 
-def init_logging(basedir):
+def init_logging(basedir, height):
     logdir = basedir / 'logs'
     logdir.mkdir(parents=True, exist_ok=True)
 
-    logpath = logdir / 'log-{}.txt'.format(datetime.datetime.now().isoformat())
+    logpath = logdir / 'log_height-{}_{}.txt'.format(height, datetime.datetime.now().isoformat())
     logfile = logpath.open('w')
     logging.basicConfig(level=logging.DEBUG, stream=logfile, format='[%(levelname) -5s] %(message)s')
 

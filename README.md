@@ -81,9 +81,11 @@ python3 ./tally.py
 
 The `tally.py` script has the specific polling viewing key baked in and will import it, request a rescan (if necessary), then query the blockchain APIs to generate the poll results.
 
-It writes the poll results in a CSV format into `~/tally-coin-poll/csvs/` with the blockheight in the filename. If that file already exists, it exits with 0 status. This allows it to be run in a loop to generate CSV files for different block heights.
+It writes the poll results in a CSV format into `~/tally-coin-poll/csvs/` with the blockheight in the filename. If that file already exists, it exits with 0 status, and doesn't log or print anything. This allows it to be run in a loop to generate CSV files for different block heights.
 
-It also writes a debug log into `~/tally-coin-poll/logs/` with a timestamp, which also helps diagnosing its behavior if run in a loop.
+If the CSV file does not exist, it prints a message to stdout about generating that file. All other logging goes into a log file:
+
+A debug log is written into `~/tally-coin-poll/logs/` with the block height and a timestamp, which also helps diagnosing its behavior if run in a loop.
 
 You can then import those results into a spreadsheet app, or process them any other way.
 
