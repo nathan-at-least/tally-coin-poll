@@ -73,17 +73,31 @@ zcash-cli getinfo
 
 #### Step 6: Run `tally.py`
 
+Running `tally.py` requires no arguments or configuration:
+
+```
+python3 ./tally.py
+```
+
 The `tally.py` script has the specific polling viewing key baked in and will import it, request a rescan (if necessary), then query the blockchain APIs to generate the poll results.
 
-It writes the poll results in a CSV format to `stdout` and writes debug information on `stderr`. You can save the results to a file with a command like this:
+It writes the poll results in a CSV format into `~/tally-coin-poll/csvs/` with the blockheight in the filename. If that file already exists, it exits with 0 status. This allows it to be run in a loop to generate CSV files for different block heights.
 
-```
-python3 ./tally.py > results.csv
-```
+It also writes a debug log into `~/tally-coin-poll/logs/` with a timestamp, which also helps diagnosing its behavior if run in a loop.
 
 You can then import those results into a spreadsheet app, or process them any other way.
 
+To run a simple update loop, you can use a shell loop such as this:
+
+```
+while sleep 17; do python3 ./tally.py; done
+```
+
+This would check for a new block every 17 seconds, and if there is one, generate the necessary CSV output.
+
 ## google-sheets-updater
+
+**WARNING: The `google-sheets-updater.py` script is incomplete and untested.**
 
 The `google-sheets-updater.py` script runs `tally.py` periodically and uploads the results to a Google Sheets document. The following describes how to configure and operate this script:
 

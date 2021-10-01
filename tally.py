@@ -2,10 +2,12 @@
 
 import re
 import csv
+import datetime
 import json
 import logging
 import sys
 import subprocess
+from pathlib import Path
 
 
 POLL_ADDRESS = 'zs1j54w96syddfnrh2ehx40lyy7zej67z496nrqtg39r6jv00ks4pjyt57xz59kzy289c2rkdr6rhe'
@@ -14,36 +16,60 @@ POLL_START_HEIGHT = 1398360
 
 
 def main(args=sys.argv[1:]):
-    logging.basicConfig(level=logging.DEBUG, stream=sys.stderr, format='[%(levelname) -5s] %(message)s')
-    logging.info('zec-coin-poll tally address: %s', POLL_ADDRESS)
+    basedir = Path.home() / 'tally-coin-poll'
 
     cli = ZcashClient()
+    height = cli.getinfo()['blocks']
+
+    csvdir = basedir / 'csvs'
+    csvdir.mkdir(parents=True, exist_ok=True)
+    csvpath = csvdir / f'tally-{height}.csv'
+
+    if csvpath.exists():
+        raise SystemExit()
+    else:
+        print(f'Tally path {csvpath} does not exist; generating...')
+
+    init_logging(basedir)
+    logging.info('Importing viewing key for zec-coin-poll tally address: %s', POLL_ADDRESS)
     cli.z_importviewingkey(POLL_VIEWING_KEY, 'whenkeyisnew', POLL_START_HEIGHT)
 
-    csvf = csv.DictWriter(
-        sys.stdout,
-        [
-            'is valid',
-            'taddr',
-            'balance',
-            'answer 1',
-            'answer 1 comment',
-            'answer 2',
-            'answer 2 comment',
-            'answer 3',
-            'answer 3 comment',
-            'parse issue',
-            'txid',
-            'block height recorded',
-        ],
-    )
-    csvf.writeheader()
+    with csvpath.open('w') as f:
+        csvf = csv.DictWriter(
+            f,
+            [
+                'is valid',
+                'taddr',
+                'balance',
+                'answer 1',
+                'answer 1 comment',
+                'answer 2',
+                'answer 2 comment',
+                'answer 3',
+                'answer 3 comment',
+                'parse issue',
+                'txid',
+                'block height recorded',
+            ],
+        )
+        csvf.writeheader()
 
-    height = cli.getinfo()['blocks']
-    for receivedinfo in cli.z_listreceivedbyaddress(POLL_ADDRESS):
-        row = create_row(cli, receivedinfo)
-        row['block height recorded'] = height
-        csvf.writerow(row)
+        height = cli.getinfo()['blocks']
+        for receivedinfo in cli.z_listreceivedbyaddress(POLL_ADDRESS):
+            row = create_row(cli, receivedinfo)
+            row['block height recorded'] = height
+            logging.debug('Writing row: %r', row)
+            csvf.writerow(row)
+
+
+def init_logging(basedir):
+    logdir = basedir / 'logs'
+    logdir.mkdir(parents=True, exist_ok=True)
+
+    logpath = logdir / 'log-{}.txt'.format(datetime.datetime.now().isoformat())
+    logfile = logpath.open('w')
+    logging.basicConfig(level=logging.DEBUG, stream=logfile, format='[%(levelname) -5s] %(message)s')
+
 
 def create_row(cli, receivedinfo):
     txid = receivedinfo['txid']
